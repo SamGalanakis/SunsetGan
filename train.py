@@ -6,7 +6,7 @@ import torchvision.datasets as datasets
 import torchvision.transforms as transforms
 from torch.utils.data import DataLoader, Dataset
 # from torch.utils.tensorboard import SummaryWriter# eh
-from modelUtils import discriminator , generator
+
 import os
 import wandb
 wandb.init(project="sunset_gan")
@@ -14,13 +14,13 @@ from skimage import io
 import numpy as np
 from PIL import Image
 #hyperparameters
-
-lr=0.0002
+from modelUtils import Discriminator, Generator
+lr=0.0005
 batchSize=64
 imgSize=64
 channelsImg=3
 channelsNoise=256
-numEpochs=100
+numEpochs=200
 featuresDiscrim=32
 featuresGen=32
 
@@ -28,7 +28,7 @@ featuresGen=32
 myTransforms=transforms.Compose([
     transforms.Resize((imgSize,imgSize)),
     transforms.ToTensor(),
-    transforms.Normalize((0.5,),(0.5,))
+          transforms.Normalize((0.5,), (0.5,)),
 ])
 
 class imageDataset(Dataset):
@@ -53,8 +53,8 @@ class imageDataset(Dataset):
         return len(self.imgPaths)
 
     def __getitem__(self, idx):
+  
         sample = Image.open(self.imgPaths[idx])
-
         if self.transform:
             sample = self.transform(sample)
 
@@ -72,16 +72,18 @@ class imageDataset(Dataset):
 # dataset=datasets.ImageFolder(root=r"data",transform=myTransforms)
 
 dataset = imageDataset(r"data\inputData",transform=myTransforms)
+# dataset = datasets.MNIST(root="dataset/",train=True,transform=myTransforms,download=True) #validate setup
 dataLoader = DataLoader(dataset,batch_size=batchSize,shuffle=True)
 device = torch.device("cuda")
 
             
 print(f"Device : {device}")
 
-netDiscriminator = discriminator(channelsImg,featuresDiscrim).to(device)
-netGenerator = generator(channelsNoise, channelsImg,featuresGen).to(device)
+# netDiscriminator = discriminator(channelsImg,featuresDiscrim).to(device)
+# netGenerator = generator(channelsNoise, channelsImg,featuresGen).to(device)
 
-
+netDiscriminator = Discriminator(channelsImg,featuresDiscrim).to(device)
+netGenerator = Generator(channelsNoise, channelsImg,featuresGen).to(device)
 
 
 optimizerDiscrim = optim.Adam(netDiscriminator.parameters(),lr=lr,betas=(0.5,0.999))
@@ -103,9 +105,11 @@ wandb.watch(netGenerator,criterion=criterion)
 
 for epoch in range(numEpochs):
     if epoch % 5 ==0 and epoch!=0:
-        netDiscriminator.save_state_dict(os.path.join(wandb.run.dir,'discriminatorStateDict.tar'))
-        netGenerator.save_state_dict(os.path.join(wandb.run.dir,'generatorStateDict.tar'))
-    for batchIndex, data in enumerate(dataLoader):
+
+        torch.save(netDiscriminator.state_dict(), os.path.join(wandb.run.dir,f'Epoch_{epoch}_discriminatorStateDict.tar'))
+        torch.save(netGenerator.state_dict(), os.path.join(wandb.run.dir,f'Epoch_{epoch}_generatorStateDict.tar'))
+       
+    for batchIndex, data in enumerate(dataLoader): #change to (data,target) for mnist
         #train discrim
         data=data.to(device)
         batchSize =data.shape[0]
@@ -143,8 +147,8 @@ for epoch in range(numEpochs):
 
             with torch.no_grad():
                 fake = netGenerator(fixedNoise)
-                imgGridReal= torchvision.utils.make_grid(data[:32],normalize=True)
-                imgGridFake = torchvision.utils.make_grid(fake[:32],normalize=True)
+                imgGridReal= torchvision.utils.make_grid(data[:32],normalize=False)
+                imgGridFake = torchvision.utils.make_grid(fake[:32],normalize=False)
       
-                wandb.log({"gridReal": wandb.Image(transforms.ToPILImage()(imgGridReal.cpu()), caption="gridReal")})
-                wandb.log({"gridFake": wandb.Image(transforms.ToPILImage()(imgGridFake.cpu()), caption="gridFake")})
+                wandb.log({"gridReal": wandb.Image(imgGridReal.cpu(), caption="gridReal")})
+                wandb.log({"gridFake": wandb.Image(imgGridFake.cpu(), caption="gridFake")})
