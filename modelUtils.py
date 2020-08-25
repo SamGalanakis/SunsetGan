@@ -74,3 +74,11 @@ class Generator(nn.Module):
 
     def forward(self, x):
         return self.net(x)
+
+
+
+
+
+
+
+        
